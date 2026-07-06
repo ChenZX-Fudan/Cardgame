@@ -144,6 +144,57 @@ body.modal-open {
 
 .quiz-hint { text-align: center; color: var(--text-dim); font-size: 0.85em; margin-top: 10px; }
 
+/* --- 问答步骤指示器 --- */
+.quiz-steps {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    margin-bottom: 18px;
+}
+.step-dot {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: var(--bg-card);
+    border: 2px solid var(--border);
+    color: var(--text-dim);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85em;
+    font-weight: 700;
+    transition: all var(--transition);
+}
+.step-dot.active {
+    background: var(--gold);
+    border-color: var(--gold);
+    color: #000;
+}
+.step-dot.done {
+    background: var(--green);
+    border-color: var(--green);
+    color: #000;
+}
+.step-line {
+    width: 40px;
+    height: 2px;
+    background: var(--border);
+    margin: 0 4px;
+    transition: background var(--transition);
+}
+.step-dot.done + .step-line {
+    background: var(--green);
+}
+/* 步骤容器切换动画 */
+.quiz-step {
+    animation: quizStepIn 0.3s ease;
+}
+@keyframes quizStepIn {
+    from { opacity: 0; transform: translateX(20px); }
+    to   { opacity: 1; transform: translateX(0); }
+}
+
 /* --- 游戏结束面板 --- */
 .gameover-panel { text-align: center; }
 #gameover-icon { font-size: 4em; margin-bottom: 10px; }

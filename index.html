@@ -35,22 +35,34 @@
   </div>
 </div>
 
-<!-- ========== 知识问答弹窗 ========== -->
+<!-- ========== 知识问答弹窗（两步：先治疗方法→再症状，解决微信滚动失效） ========== -->
 <div id="quiz-modal" class="modal">
   <div class="modal-content quiz-panel">
     <h2 id="quiz-disease-name"></h2>
-    <!-- 治疗方法选择题 -->
-    <div class="quiz-section">
-      <h3>🧪 <span id="quiz-treatment-q"></span></h3>
-      <div id="quiz-treatment-options" class="quiz-options"></div>
+    <!-- 步骤指示器 -->
+    <div id="quiz-steps-indicator" class="quiz-steps">
+      <span id="quiz-step-dot1" class="step-dot active">1</span>
+      <span class="step-line"></span>
+      <span id="quiz-step-dot2" class="step-dot">2</span>
     </div>
-    <!-- 症状选择题 -->
-    <div class="quiz-section">
-      <h3>🤒 <span id="quiz-symptom-q"></span></h3>
-      <div id="quiz-symptom-options" class="quiz-options"></div>
+    <!-- 步骤1：治疗方法 -->
+    <div id="quiz-step1" class="quiz-step">
+      <div class="quiz-section">
+        <h3>🧪 <span id="quiz-treatment-q"></span></h3>
+        <div id="quiz-treatment-options" class="quiz-options"></div>
+      </div>
+      <button id="quiz-step1-btn" class="btn btn-primary" disabled>下一步 →</button>
+      <p id="quiz-hint1" class="quiz-hint">请选择1个治疗方法</p>
     </div>
-    <button id="quiz-submit" class="btn btn-primary" disabled>提交答案</button>
-    <p id="quiz-hint" class="quiz-hint">请选择1个治疗方法 + 2个症状</p>
+    <!-- 步骤2：症状 -->
+    <div id="quiz-step2" class="quiz-step" style="display:none">
+      <div class="quiz-section">
+        <h3>🤒 <span id="quiz-symptom-q"></span></h3>
+        <div id="quiz-symptom-options" class="quiz-options"></div>
+      </div>
+      <button id="quiz-step2-btn" class="btn btn-primary" disabled>提交答案</button>
+      <p id="quiz-hint2" class="quiz-hint">请选择2个症状</p>
+    </div>
   </div>
 </div>
 

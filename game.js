@@ -31,6 +31,7 @@ const G = {
     quizDisease: null,     // 当前问答对应的疾病名
     quizTreatment: null,   // 玩家选的治疗方法选项index
     quizSymptoms: [],      // 玩家选的症状选项index数组
+    quizStep: 1,           // 当前问答步骤：1=治疗方法, 2=症状
     isProcessing: false,   // 防止重复点击
 };
 
@@ -50,6 +51,7 @@ function startGame(difficulty) {
     G.quizDisease = null;
     G.quizTreatment = null;
     G.quizSymptoms = [];
+    G.quizStep = 1;
     G.isProcessing = false;
 
     // 发牌: 各5张
@@ -340,6 +342,7 @@ function showQuizModal(diseaseName) {
 
     G.quizTreatment = null;
     G.quizSymptoms = [];
+    G.quizStep = 1;
 
     $('quiz-disease-name').textContent = `📋 ${diseaseName} 知识问答`;
     $('quiz-treatment-q').textContent = kb.treatment.question;
@@ -367,22 +370,50 @@ function showQuizModal(diseaseName) {
         sContainer.appendChild(div);
     });
 
-    $('quiz-submit').disabled = true;
-    $('quiz-hint').textContent = '请选择1个治疗方法 + 2个症状';
+    // 步骤1：显示治疗方法，隐藏症状
+    $('quiz-step1').style.display = '';
+    $('quiz-step2').style.display = 'none';
+    $('quiz-step1-btn').disabled = true;
+    $('quiz-hint1').textContent = '请选择1个治疗方法';
+    updateQuizStepIndicator(1);
     openModal('quiz-modal');
 }
 
 function selectQuizTreatment(index) {
     if (G.phase !== 'player_quiz') return;
+    if (G.quizStep !== 1) return;
     G.quizTreatment = index;
     // 更新UI高亮
     const options = $('quiz-treatment-options').children;
     Array.from(options).forEach((el, i) => el.classList.toggle('selected', i === index));
-    updateQuizSubmit();
+    // 启用"下一步"按钮
+    $('quiz-step1-btn').disabled = false;
+    $('quiz-hint1').textContent = '已选择，点击下一步';
+}
+
+// 步骤1→步骤2：治疗方法选好后，进入症状选择
+function goToQuizStep2() {
+    if (G.quizTreatment === null) return;
+    G.quizStep = 2;
+    $('quiz-step1').style.display = 'none';
+    $('quiz-step2').style.display = '';
+    $('quiz-step2-btn').disabled = true;
+    $('quiz-hint2').textContent = '请选择2个症状';
+    updateQuizStepIndicator(2);
+}
+
+// 更新步骤指示器UI
+function updateQuizStepIndicator(step) {
+    const dot1 = $('quiz-step-dot1');
+    const dot2 = $('quiz-step-dot2');
+    dot1.classList.toggle('active', step === 1);
+    dot1.classList.toggle('done', step > 1);
+    dot2.classList.toggle('active', step === 2);
 }
 
 function selectQuizSymptom(index) {
     if (G.phase !== 'player_quiz') return;
+    if (G.quizStep !== 2) return;
     const idx = G.quizSymptoms.indexOf(index);
     if (idx >= 0) {
         G.quizSymptoms.splice(idx, 1);
@@ -396,21 +427,19 @@ function selectQuizSymptom(index) {
 }
 
 function updateQuizSubmit() {
-    const ready = G.quizTreatment !== null && G.quizSymptoms.length === 2;
-    $('quiz-submit').disabled = !ready;
+    const ready = G.quizSymptoms.length === 2;
+    $('quiz-step2-btn').disabled = !ready;
     if (ready) {
-        $('quiz-hint').textContent = '已选择完毕，请提交答案';
+        $('quiz-hint2').textContent = '已选择完毕，请提交答案';
     } else {
-        const t = G.quizTreatment === null ? '1个治疗方法' : '';
-        const s = G.quizSymptoms.length < 2 ? `${G.quizSymptoms.length}/2个症状` : '';
-        const missing = [t, s].filter(Boolean).join(' + ');
-        $('quiz-hint').textContent = `还需选择：${missing || '...'}`;
+        $('quiz-hint2').textContent = `还需选择：${G.quizSymptoms.length}/2个症状`;
     }
 }
 
 async function onQuizSubmit() {
     if (G.isProcessing) return;
     if (G.phase !== 'player_quiz') return;
+    if (G.quizStep !== 2) return;
     if (G.quizTreatment === null || G.quizSymptoms.length !== 2) return;
     G.isProcessing = true;
 
@@ -422,7 +451,7 @@ async function onQuizSubmit() {
         && G.quizSymptoms.length === 2
         && kb.symptoms.options.filter((o, i) => o.correct && G.quizSymptoms.includes(i)).length === 2;
 
-    // 显示答案
+    // 显示答案（两步都高亮）
     highlightQuizAnswers(kb);
 
     if (treatmentCorrect && symptomsCorrect) {
@@ -442,6 +471,10 @@ async function onQuizSubmit() {
 }
 
 function highlightQuizAnswers(kb) {
+    // 显示步骤2（症状）以便用户看到完整结果
+    $('quiz-step1').style.display = 'none';
+    $('quiz-step2').style.display = '';
+    updateQuizStepIndicator(2);
     // 高亮治疗选项
     Array.from($('quiz-treatment-options').children).forEach((el, i) => {
         el.classList.remove('selected');
@@ -454,6 +487,8 @@ function highlightQuizAnswers(kb) {
         if (kb.symptoms.options[i].correct) el.classList.add('correct');
         else if (G.quizSymptoms.includes(i) && !kb.symptoms.options[i].correct) el.classList.add('wrong');
     });
+    $('quiz-step2-btn').style.display = 'none';
+    $('quiz-hint2').textContent = '答案已显示';
 }
 
 async function onQuizPass() {
@@ -462,6 +497,7 @@ async function onQuizPass() {
     G.quizDisease = null;
     G.quizTreatment = null;
     G.quizSymptoms = [];
+    G.quizStep = 1;
     G.battleAttack = [];
     G.battleDefend = [];
     G.activeDisease = null;
@@ -478,6 +514,7 @@ async function onQuizFail() {
     G.quizDisease = null;
     G.quizTreatment = null;
     G.quizSymptoms = [];
+    G.quizStep = 1;
     G.battleAttack = [];
     G.battleDefend = [];
     G.activeDisease = null;
@@ -902,8 +939,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // 确认出牌
     $('btn-confirm').addEventListener('click', onPlayerConfirm);
 
-    // 问答提交
-    $('quiz-submit').addEventListener('click', onQuizSubmit);
+    // 问答步骤按钮
+    $('quiz-step1-btn').addEventListener('click', goToQuizStep2);
+    $('quiz-step2-btn').addEventListener('click', onQuizSubmit);
 
     // 重新开始
     $('gameover-restart').addEventListener('click', () => {
