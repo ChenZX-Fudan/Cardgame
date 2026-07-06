@@ -469,7 +469,8 @@ body.modal-open {
     .battle-slot { min-width: 80px; }
 
     /* 手机端问答弹窗优化 */
-    .modal-content { padding: 20px 16px; margin: 2vh auto; }
+    .modal-content { padding: 20px 16px; margin: 2vh auto; max-height: 90vh; overflow-y: auto; }
+    .quiz-panel { max-height: 88vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
     .difficulty-panel h1 { font-size: 1.5em; }
     .quiz-panel h2 { font-size: 1.1em; margin-bottom: 12px; }
     .quiz-section { margin-bottom: 12px; }

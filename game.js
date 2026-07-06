@@ -8,6 +8,13 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 function $(id) { return document.getElementById(id); }
 
+// 计算整数二进制中1的个数（popcount）
+function countBits(n) {
+    let c = 0;
+    while (n) { c++; n &= n - 1; }
+    return c;
+}
+
 // ==================== 游戏状态 ====================
 
 const G = {
@@ -238,6 +245,11 @@ function onPlayerCardClick(cardId) {
         if (idx >= 0) {
             G.playerSelected.splice(idx, 1);
         } else {
+            // 限制每次出牌不超过3张
+            if (G.playerSelected.length >= 3) {
+                addLog('每次最多只能出3张牌！请取消已选卡牌后再选。', 'log-warn');
+                return;
+            }
             G.playerSelected.push(card);
         }
     }
@@ -552,8 +564,11 @@ function findBestDefense(hand, targetLevel, difficulty) {
     let allCombos = [];
 
     // 枚举所有子集 (最多2^12=4096，实际手牌不会超过15张)
+    // 限制每次出牌不超过3张
     for (let mask = 1; mask < (1 << n); mask++) {
         const subset = [];
+        // 快速跳过超过3张的组合
+        if (countBits(mask) > 3) continue;
         for (let i = 0; i < n; i++) {
             if (mask & (1 << i)) subset.push(usable[i]);
         }
@@ -793,6 +808,10 @@ function renderCardCounts() {
 function enablePlayerSelect(mode) {
     // mode: 'disease' | 'defense'
     $('btn-confirm').style.display = 'inline-block';
+    const btn = $('btn-confirm');
+    if (mode === 'defense') {
+        btn.textContent = '请选择治疗卡（最多3张）';
+    }
     updateConfirmButton();
 }
 
@@ -813,14 +832,14 @@ function updateConfirmButton() {
     } else if (G.phase === 'player_defend') {
         if (G.playerSelected.length === 0) {
             btn.disabled = true;
-            btn.textContent = '请选择治疗卡';
+            btn.textContent = '请选择治疗卡（最多3张）';
         } else {
             const eff = calcEffectiveLevel(G.playerSelected);
             const target = G.activeDisease ? G.activeDisease.level : 0;
             btn.disabled = eff < target;
             btn.textContent = eff >= target
-                ? `确认出牌 (等级 ${eff} ≥ ${target})`
-                : `等级不足 (${eff} < ${target})`;
+                ? `确认出牌 (${G.playerSelected.length}/3张, 等级 ${eff} ≥ ${target})`
+                : `等级不足 (${G.playerSelected.length}/3张, ${eff} < ${target})`;
         }
     }
 }
@@ -836,7 +855,12 @@ function lockBodyScroll(lock) {
         document.body.removeEventListener('touchmove', preventBodyScroll, { passive: false });
     }
 }
-function preventBodyScroll(e) { e.preventDefault(); }
+function preventBodyScroll(e) {
+    // 只阻止弹窗外的滚动，允许弹窗内部滚动
+    if (!e.target.closest('.modal.show')) {
+        e.preventDefault();
+    }
+}
 
 function openModal(id) {
     $(id).classList.add('show');
