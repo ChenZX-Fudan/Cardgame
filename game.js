@@ -844,30 +844,39 @@ function updateConfirmButton() {
     }
 }
 
-// 微信内置浏览器滚动穿透修复：弹窗打开时锁定 body
+// 微信内置浏览器滚动穿透修复
+// 关键：把 touchmove 监听绑在 .modal 上而不是 body，
+// 因为微信 X5 WebView 中 body 的事件冒泡路径不可靠。
+
 function lockBodyScroll(lock) {
     if (lock) {
         document.body.classList.add('modal-open');
-        // 阻止 body 上的 touchmove（微信 WebView 关键修复）
-        document.body.addEventListener('touchmove', preventBodyScroll, { passive: false });
     } else {
         document.body.classList.remove('modal-open');
-        document.body.removeEventListener('touchmove', preventBodyScroll, { passive: false });
-    }
-}
-function preventBodyScroll(e) {
-    // 只阻止弹窗外的滚动，允许弹窗内部滚动
-    if (!e.target.closest('.modal.show')) {
-        e.preventDefault();
     }
 }
 
+function modalTouchMove(e) {
+    // 如果触摸点在弹窗内容区域内，允许滚动
+    if (e.target.closest('.modal-content')) {
+        return;
+    }
+    // 触摸在遮罩层（暗色背景区域），阻止滚动穿透
+    e.preventDefault();
+}
+
 function openModal(id) {
-    $(id).classList.add('show');
+    const modal = $(id);
+    modal.classList.add('show');
+    // touchmove 绑在 modal 上，比绑在 body 上更能可靠拦截微信浏览器的滚动穿透
+    modal.addEventListener('touchmove', modalTouchMove, { passive: false });
     lockBodyScroll(true);
 }
+
 function closeModal(id) {
-    $(id).classList.remove('show');
+    const modal = $(id);
+    modal.classList.remove('show');
+    modal.removeEventListener('touchmove', modalTouchMove, { passive: false });
     // 检查是否还有其他弹窗开着
     if (!document.querySelector('.modal.show')) {
         lockBodyScroll(false);

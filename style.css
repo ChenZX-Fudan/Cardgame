@@ -73,8 +73,7 @@ body {
 /* 弹窗打开时禁止 body 滚动（防止滚动穿透） */
 body.modal-open {
     overflow: hidden;
-    position: fixed;
-    width: 100%;
+    /* 不用 position:fixed，避免微信浏览器 Viewport 跳动和层级错乱 */
 }
 
 /* --- 难度选择面板 --- */
