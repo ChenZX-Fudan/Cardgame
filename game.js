@@ -844,19 +844,22 @@ function updateConfirmButton() {
     }
 }
 
-// 微信内置浏览器滚动穿透修复：纯 CSS 方案
-// .modal 是 flex 居中遮罩，.modal-content 自行 overflow:auto 滚动
-// body.modal-open { overflow:hidden } 防止背景滚动
-// .modal / .modal-content 都设了 overscroll-behavior:contain 防止滚动链
-// 不绑定任何 touchmove JS 监听器——微信 X5 内核的 JS touchmove
-// 即使放行也会破坏原生滚动
+// 微信内置浏览器滚动穿透修复
+// 注意：滚动在 .modal 自身（display:block + overflow-y:auto），不是 .modal-content
+// 微信端仅 CSS overflow:hidden 无法阻止 body 背景滚动，必须 JS 拦截 body 的 touchmove
 
 function lockBodyScroll(lock) {
     if (lock) {
         document.body.classList.add('modal-open');
+        document.body.addEventListener('touchmove', preventBodyScroll, { passive: false });
     } else {
         document.body.classList.remove('modal-open');
+        document.body.removeEventListener('touchmove', preventBodyScroll, { passive: false });
     }
+}
+
+function preventBodyScroll(e) {
+    e.preventDefault();
 }
 
 function openModal(id) {

@@ -38,6 +38,10 @@ body {
 }
 
 /* --- 弹窗通用 --- */
+/* 微信兼容关键：
+   .modal 必须用 display:block（不能用 flex），且 .modal 自身作为滚动容器。
+   微信 X5 WebView 不支持 flex 嵌套 overflow:auto —— 内部滚动直接失效。
+   所以：.modal 负责滚动，.modal-content 仅用 margin 居中。 */
 .modal {
     display: none;
     position: fixed;
@@ -45,14 +49,12 @@ body {
     background: rgba(0,0,0,0.75);
     z-index: 1000;
     backdrop-filter: blur(3px);
-    /* 微信兼容：用 flex 居中，不要 overflow，让 .modal-content 自己滚动 */
-    display: none;
-    align-items: flex-start;
-    justify-content: center;
-    /* 阻止滚动链传递到 body */
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
 }
-.modal.show { display: flex; }
+.modal.show { display: block; }
 
 .modal-content {
     background: var(--bg-panel);
@@ -61,14 +63,9 @@ body {
     padding: 32px;
     max-width: 560px;
     width: 90%;
-    margin: 5vh 0;
+    margin: 5vh auto;
     animation: modalIn 0.3s ease;
-    /* 弹窗内容自己滚动，不依赖 JS touchmove */
-    max-height: 90vh;
-    overflow-y: auto;
-    overflow-x: hidden;
-    -webkit-overflow-scrolling: touch;
-    overscroll-behavior: contain;
+    /* 注意：overflow 不要写在这里，写在 .modal 上 */
 }
 
 @keyframes modalIn {
@@ -474,8 +471,7 @@ body.modal-open {
     .battle-slot { min-width: 80px; }
 
     /* 手机端问答弹窗优化 */
-    .modal-content { padding: 20px 16px; margin: 3vh 0; max-height: 94vh; }
-    .quiz-panel { /* content 已处理滚动，quiz-panel 无需重复 */ }
+    .modal-content { padding: 20px 16px; margin: 3vh auto; }
     .difficulty-panel h1 { font-size: 1.5em; }
     .quiz-panel h2 { font-size: 1.1em; margin-bottom: 12px; }
     .quiz-section { margin-bottom: 12px; }
