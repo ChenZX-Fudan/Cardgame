@@ -44,11 +44,14 @@ body {
     inset: 0;
     background: rgba(0,0,0,0.75);
     z-index: 1000;
-    justify-content: center;
-    align-items: center;
     backdrop-filter: blur(3px);
+    /* 微信内置浏览器兼容：fixed 容器自身作为滚动区 */
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
 }
-.modal.show { display: flex; }
+.modal.show { display: block; }
 
 .modal-content {
     background: var(--bg-panel);
@@ -57,15 +60,21 @@ body {
     padding: 32px;
     max-width: 560px;
     width: 90%;
-    max-height: 90vh;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
+    /* 用 margin 居中，避免 flex 嵌套 overflow 在微信 WebView 中的 bug */
+    margin: 5vh auto;
     animation: modalIn 0.3s ease;
 }
 
 @keyframes modalIn {
     from { opacity: 0; transform: scale(0.9) translateY(-20px); }
     to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* 弹窗打开时禁止 body 滚动（防止滚动穿透） */
+body.modal-open {
+    overflow: hidden;
+    position: fixed;
+    width: 100%;
 }
 
 /* --- 难度选择面板 --- */
@@ -460,11 +469,15 @@ body {
     .battle-slot { min-width: 80px; }
 
     /* 手机端问答弹窗优化 */
-    .modal-content { padding: 20px 16px; }
+    .modal-content { padding: 20px 16px; margin: 2vh auto; }
+    .difficulty-panel h1 { font-size: 1.5em; }
     .quiz-panel h2 { font-size: 1.1em; margin-bottom: 12px; }
     .quiz-section { margin-bottom: 12px; }
     .quiz-section h3 { font-size: 0.9em; }
     .quiz-option { padding: 10px 12px; font-size: 0.85em; }
     .quiz-hint { font-size: 0.8em; margin-top: 8px; }
     .btn { padding: 10px 20px; font-size: 0.95em; }
+    .diff-btn { padding: 12px 14px; }
+    .diff-btn .diff-icon { font-size: 1.4em; }
+    .diff-btn .diff-name { font-size: 1em; }
 }

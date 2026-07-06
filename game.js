@@ -52,9 +52,9 @@ function startGame(difficulty) {
     }
 
     // 隐藏弹窗
-    $('difficulty-modal').classList.remove('show');
-    $('quiz-modal').classList.remove('show');
-    $('gameover-modal').classList.remove('show');
+    closeModal('difficulty-modal');
+    closeModal('quiz-modal');
+    closeModal('gameover-modal');
 
     // 清空日志
     $('battle-log').innerHTML = '';
@@ -357,7 +357,7 @@ function showQuizModal(diseaseName) {
 
     $('quiz-submit').disabled = true;
     $('quiz-hint').textContent = '请选择1个治疗方法 + 2个症状';
-    $('quiz-modal').classList.add('show');
+    openModal('quiz-modal');
 }
 
 function selectQuizTreatment(index) {
@@ -416,7 +416,7 @@ async function onQuizSubmit() {
     if (treatmentCorrect && symptomsCorrect) {
         addLog('✅ 回答完全正确！轮到你出牌攻击。', 'log-action');
         await sleep(1000);
-        $('quiz-modal').classList.remove('show');
+        closeModal('quiz-modal');
         onQuizPass();
     } else {
         let reason = '';
@@ -424,7 +424,7 @@ async function onQuizSubmit() {
         if (!symptomsCorrect) reason += (reason ? '，' : '') + '症状选错';
         addLog(`❌ 回答错误（${reason}），电脑继续攻击！`, 'log-error');
         await sleep(1500);
-        $('quiz-modal').classList.remove('show');
+        closeModal('quiz-modal');
         onQuizFail();
     }
 }
@@ -635,7 +635,7 @@ function endGame(winner, reason) {
         detail = '牌堆耗尽，无法继续出牌。';
     }
     $('gameover-detail').textContent = detail;
-    $('gameover-modal').classList.add('show');
+    openModal('gameover-modal');
 
     $('turn-indicator').textContent = isPlayerWin ? '🏆 你赢了！' : '💀 你输了...';
     addLog(isPlayerWin ? '🎉 恭喜获胜！' : '💀 败北...再来一局吧！', isPlayerWin ? 'log-action' : 'log-error');
@@ -824,6 +824,31 @@ function updateConfirmButton() {
     }
 }
 
+// 微信内置浏览器滚动穿透修复：弹窗打开时锁定 body
+function lockBodyScroll(lock) {
+    if (lock) {
+        document.body.classList.add('modal-open');
+        // 阻止 body 上的 touchmove（微信 WebView 关键修复）
+        document.body.addEventListener('touchmove', preventBodyScroll, { passive: false });
+    } else {
+        document.body.classList.remove('modal-open');
+        document.body.removeEventListener('touchmove', preventBodyScroll, { passive: false });
+    }
+}
+function preventBodyScroll(e) { e.preventDefault(); }
+
+function openModal(id) {
+    $(id).classList.add('show');
+    lockBodyScroll(true);
+}
+function closeModal(id) {
+    $(id).classList.remove('show');
+    // 检查是否还有其他弹窗开着
+    if (!document.querySelector('.modal.show')) {
+        lockBodyScroll(false);
+    }
+}
+
 function addLog(msg, cls) {
     const log = $('battle-log');
     const p = document.createElement('p');
@@ -857,15 +882,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 重新开始
     $('gameover-restart').addEventListener('click', () => {
-        $('gameover-modal').classList.remove('show');
-        $('difficulty-modal').classList.add('show');
+        closeModal('gameover-modal');
+        openModal('difficulty-modal');
     });
     $('btn-restart').addEventListener('click', () => {
         if (G.phase !== 'game_over' && G.phase !== 'init') {
             if (!confirm('确定要重新开始吗？当前进度将丢失。')) return;
         }
-        $('gameover-modal').classList.remove('show');
-        $('difficulty-modal').classList.add('show');
+        closeModal('gameover-modal');
+        openModal('difficulty-modal');
         G.phase = 'init';
         disablePlayerSelect();
         $('battle-log').innerHTML = '<p class="log-placeholder">请选择难度开始游戏。</p>';
@@ -876,7 +901,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // 初始显示难度选择
-    $('difficulty-modal').classList.add('show');
+    openModal('difficulty-modal');
     $('btn-confirm').style.display = 'none';
     renderAll();
 });
