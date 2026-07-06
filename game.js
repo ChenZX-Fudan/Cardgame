@@ -684,7 +684,7 @@ function renderHand(who) {
             div.addEventListener('click', () => onPlayerCardClick(card.id));
             div.innerHTML = `
                 <span class="card-type-badge">${typeLabel(card.type)}</span>
-                <img src="${card.image}" alt="${card.name}" onerror="this.style.display='none'">
+                <img src="${card.image}" alt="${card.name}">
                 <div class="card-info">
                     <span class="card-name">${card.name}</span>
                     <span class="card-level">Lv.${card.level}</span>
@@ -703,7 +703,7 @@ function renderHand(who) {
             div.className = `card ${card.type}`;
             div.innerHTML = `
                 <span class="card-type-badge">${typeLabel(card.type)}</span>
-                <img src="${card.image}" alt="${card.name}" onerror="this.style.display='none'">
+                <img src="${card.image}" alt="${card.name}">
                 <div class="card-info">
                     <span class="card-name">${card.name}</span>
                     <span class="card-level">Lv.${card.level}</span>
@@ -743,6 +743,7 @@ function typeLabel(type) {
     const map = { disease: '疾病', treatment: '治疗', time: '时间', special: '特殊' };
     return map[type] || type;
 }
+
 
 function renderBattle() {
     const attackSlot = document.querySelector('#slot-attack .slot-cards');

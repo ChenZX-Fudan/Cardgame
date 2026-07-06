@@ -8,35 +8,35 @@
 
 const CARD_DEFS = [
     // 疾病类 (12张)
-    { name: '新冠病毒', type: 'disease', level: 10, count: 1, image: 'cards/COVID-19.png',
+    { name: '新冠病毒', type: 'disease', level: 10, count: 1, image: 'cards/COVID-19.webp',
       desc: 'COVID-19，传染性极强' },
-    { name: '肺炎',     type: 'disease', level: 8,  count: 2, image: 'cards/Pneumonia.png',
+    { name: '肺炎',     type: 'disease', level: 8,  count: 2, image: 'cards/Pneumonia.webp',
       desc: '细菌性肺炎，需要抗生素治疗' },
-    { name: '甲流',     type: 'disease', level: 7,  count: 3, image: 'cards/H1N1.png',
+    { name: '甲流',     type: 'disease', level: 7,  count: 3, image: 'cards/H1N1.webp',
       desc: '甲型H1N1流感，抗病毒治疗有效' },
-    { name: '感冒',     type: 'disease', level: 6,  count: 6, image: 'cards/cold.png',
+    { name: '感冒',     type: 'disease', level: 6,  count: 6, image: 'cards/cold.webp',
       desc: '普通感冒，对症治疗即可' },
 
     // 治疗类 (12张)
-    { name: '科学家',   type: 'treatment', level: 7, count: 1, image: 'cards/scientist.png',
+    { name: '科学家',   type: 'treatment', level: 7, count: 1, image: 'cards/scientist.webp',
       desc: '研发治疗方案的核心力量' },
-    { name: '医生',     type: 'treatment', level: 7, count: 1, image: 'cards/doctor.png',
+    { name: '医生',     type: 'treatment', level: 7, count: 1, image: 'cards/doctor.webp',
       desc: '临床经验丰富的主治医师' },
-    { name: '药剂师',   type: 'treatment', level: 6, count: 2, image: 'cards/Pharmacist.png',
+    { name: '药剂师',   type: 'treatment', level: 6, count: 2, image: 'cards/Pharmacist.webp',
       desc: '调配药物，精准用药' },
-    { name: '护士',     type: 'treatment', level: 5, count: 2, image: 'cards/nurse.png',
+    { name: '护士',     type: 'treatment', level: 5, count: 2, image: 'cards/nurse.webp',
       desc: '细心护理，加速康复' },
-    { name: '志愿者',   type: 'treatment', level: 4, count: 6, image: 'cards/volunteer.png',
+    { name: '志愿者',   type: 'treatment', level: 4, count: 6, image: 'cards/volunteer.webp',
       desc: '基层防疫的中坚力量' },
 
     // 时间类 (9张)
-    { name: '十天',     type: 'time', level: 3, count: 3, image: 'cards/tendays.png',
+    { name: '十天',     type: 'time', level: 3, count: 3, image: 'cards/tendays.webp',
       desc: '争取十天的治疗窗口' },
-    { name: '五天',     type: 'time', level: 2, count: 6, image: 'cards/fivedays.png',
+    { name: '五天',     type: 'time', level: 2, count: 6, image: 'cards/fivedays.webp',
       desc: '争取五天的治疗窗口' },
 
     // 特殊卡 (1张)
-    { name: '疫苗',     type: 'special', level: 0, count: 1, image: 'cards/vaccine.png',
+    { name: '疫苗',     type: 'special', level: 0, count: 1, image: 'cards/vaccine.webp',
       desc: '治疗等级翻倍！与治疗卡组合使用' },
 ];
 
