@@ -844,9 +844,12 @@ function updateConfirmButton() {
     }
 }
 
-// 微信内置浏览器滚动穿透修复
-// 关键：把 touchmove 监听绑在 .modal 上而不是 body，
-// 因为微信 X5 WebView 中 body 的事件冒泡路径不可靠。
+// 微信内置浏览器滚动穿透修复：纯 CSS 方案
+// .modal 是 flex 居中遮罩，.modal-content 自行 overflow:auto 滚动
+// body.modal-open { overflow:hidden } 防止背景滚动
+// .modal / .modal-content 都设了 overscroll-behavior:contain 防止滚动链
+// 不绑定任何 touchmove JS 监听器——微信 X5 内核的 JS touchmove
+// 即使放行也会破坏原生滚动
 
 function lockBodyScroll(lock) {
     if (lock) {
@@ -856,28 +859,13 @@ function lockBodyScroll(lock) {
     }
 }
 
-function modalTouchMove(e) {
-    // 如果触摸点在弹窗内容区域内，允许滚动
-    if (e.target.closest('.modal-content')) {
-        return;
-    }
-    // 触摸在遮罩层（暗色背景区域），阻止滚动穿透
-    e.preventDefault();
-}
-
 function openModal(id) {
-    const modal = $(id);
-    modal.classList.add('show');
-    // touchmove 绑在 modal 上，比绑在 body 上更能可靠拦截微信浏览器的滚动穿透
-    modal.addEventListener('touchmove', modalTouchMove, { passive: false });
+    $(id).classList.add('show');
     lockBodyScroll(true);
 }
 
 function closeModal(id) {
-    const modal = $(id);
-    modal.classList.remove('show');
-    modal.removeEventListener('touchmove', modalTouchMove, { passive: false });
-    // 检查是否还有其他弹窗开着
+    $(id).classList.remove('show');
     if (!document.querySelector('.modal.show')) {
         lockBodyScroll(false);
     }

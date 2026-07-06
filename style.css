@@ -45,13 +45,14 @@ body {
     background: rgba(0,0,0,0.75);
     z-index: 1000;
     backdrop-filter: blur(3px);
-    /* 微信内置浏览器兼容：fixed 容器自身作为滚动区 */
-    overflow-y: auto;
-    overflow-x: hidden;
-    -webkit-overflow-scrolling: touch;
-    touch-action: pan-y;
+    /* 微信兼容：用 flex 居中，不要 overflow，让 .modal-content 自己滚动 */
+    display: none;
+    align-items: flex-start;
+    justify-content: center;
+    /* 阻止滚动链传递到 body */
+    overscroll-behavior: contain;
 }
-.modal.show { display: block; }
+.modal.show { display: flex; }
 
 .modal-content {
     background: var(--bg-panel);
@@ -60,9 +61,14 @@ body {
     padding: 32px;
     max-width: 560px;
     width: 90%;
-    /* 用 margin 居中，避免 flex 嵌套 overflow 在微信 WebView 中的 bug */
-    margin: 5vh auto;
+    margin: 5vh 0;
     animation: modalIn 0.3s ease;
+    /* 弹窗内容自己滚动，不依赖 JS touchmove */
+    max-height: 90vh;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
 }
 
 @keyframes modalIn {
@@ -468,8 +474,8 @@ body.modal-open {
     .battle-slot { min-width: 80px; }
 
     /* 手机端问答弹窗优化 */
-    .modal-content { padding: 20px 16px; margin: 2vh auto; max-height: 90vh; overflow-y: auto; }
-    .quiz-panel { max-height: 88vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+    .modal-content { padding: 20px 16px; margin: 3vh 0; max-height: 94vh; }
+    .quiz-panel { /* content 已处理滚动，quiz-panel 无需重复 */ }
     .difficulty-panel h1 { font-size: 1.5em; }
     .quiz-panel h2 { font-size: 1.1em; margin-bottom: 12px; }
     .quiz-section { margin-bottom: 12px; }
