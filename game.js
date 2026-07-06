@@ -247,9 +247,11 @@ function onPlayerCardClick(cardId) {
         if (idx >= 0) {
             G.playerSelected.splice(idx, 1);
         } else {
-            // 限制每次出牌不超过3张
-            if (G.playerSelected.length >= 3) {
-                addLog('每次最多只能出3张牌！请取消已选卡牌后再选。', 'log-warn');
+            // 当前已选等级已足够则不允许再添加（防止故意浪费卡牌）
+            const curEff = calcEffectiveLevel(G.playerSelected);
+            const target = G.activeDisease ? G.activeDisease.level : 0;
+            if (curEff >= target) {
+                addLog('当前等级已足够应对，不需要再选更多卡牌。', 'log-warn');
                 return;
             }
             G.playerSelected.push(card);
@@ -370,10 +372,12 @@ function showQuizModal(diseaseName) {
         sContainer.appendChild(div);
     });
 
-    // 步骤1：显示治疗方法，隐藏症状
+    // 步骤1：显示治疗方法，隐藏症状；恢复按钮可见性（上次问答可能被 highlightQuizAnswers 隐藏）
     $('quiz-step1').style.display = '';
     $('quiz-step2').style.display = 'none';
+    $('quiz-step1-btn').style.display = '';
     $('quiz-step1-btn').disabled = true;
+    $('quiz-step2-btn').style.display = '';
     $('quiz-hint1').textContent = '请选择1个治疗方法';
     updateQuizStepIndicator(1);
     openModal('quiz-modal');
@@ -847,7 +851,7 @@ function enablePlayerSelect(mode) {
     $('btn-confirm').style.display = 'inline-block';
     const btn = $('btn-confirm');
     if (mode === 'defense') {
-        btn.textContent = '请选择治疗卡（最多3张）';
+        btn.textContent = '请选择治疗卡应对';
     }
     updateConfirmButton();
 }
@@ -869,14 +873,14 @@ function updateConfirmButton() {
     } else if (G.phase === 'player_defend') {
         if (G.playerSelected.length === 0) {
             btn.disabled = true;
-            btn.textContent = '请选择治疗卡（最多3张）';
+            btn.textContent = '请选择治疗卡应对';
         } else {
             const eff = calcEffectiveLevel(G.playerSelected);
             const target = G.activeDisease ? G.activeDisease.level : 0;
             btn.disabled = eff < target;
             btn.textContent = eff >= target
-                ? `确认出牌 (${G.playerSelected.length}/3张, 等级 ${eff} ≥ ${target})`
-                : `等级不足 (${G.playerSelected.length}/3张, ${eff} < ${target})`;
+                ? `确认出牌 (${G.playerSelected.length}张, 等级 ${eff} ≥ ${target})`
+                : `等级不足 (${G.playerSelected.length}张, ${eff} < ${target})`;
         }
     }
 }
