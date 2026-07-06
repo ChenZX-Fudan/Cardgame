@@ -57,6 +57,9 @@ body {
     padding: 32px;
     max-width: 560px;
     width: 90%;
+    max-height: 90vh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
     animation: modalIn 0.3s ease;
 }
 
@@ -455,4 +458,13 @@ body {
     .hand-area { gap: 6px; min-height: 100px; }
     .battle-cards { gap: 10px; }
     .battle-slot { min-width: 80px; }
+
+    /* 手机端问答弹窗优化 */
+    .modal-content { padding: 20px 16px; }
+    .quiz-panel h2 { font-size: 1.1em; margin-bottom: 12px; }
+    .quiz-section { margin-bottom: 12px; }
+    .quiz-section h3 { font-size: 0.9em; }
+    .quiz-option { padding: 10px 12px; font-size: 0.85em; }
+    .quiz-hint { font-size: 0.8em; margin-top: 8px; }
+    .btn { padding: 10px 20px; font-size: 0.95em; }
 }
