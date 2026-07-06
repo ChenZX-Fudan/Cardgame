@@ -32,6 +32,7 @@ const G = {
     quizTreatment: null,   // 玩家选的治疗方法选项index
     quizSymptoms: [],      // 玩家选的症状选项index数组
     quizStep: 1,           // 当前问答步骤：1=治疗方法, 2=症状
+    quizTreatmentCorrect: null, // 步骤1治疗是否答对 (null=未判定)
     isProcessing: false,   // 防止重复点击
 };
 
@@ -52,6 +53,7 @@ function startGame(difficulty) {
     G.quizTreatment = null;
     G.quizSymptoms = [];
     G.quizStep = 1;
+    G.quizTreatmentCorrect = null;
     G.isProcessing = false;
 
     // 发牌: 各5张
@@ -136,12 +138,55 @@ async function phaseComputerDefend() {
     const effLevel = calcEffectiveLevel(combo);
     addLog(`电脑打出 ${combo.map(c => c.name).join(' + ')}（等级 ${effLevel} ≥ ${targetLevel}）`, 'log-info');
 
-    // 电脑展示知识(自动正确)
+    // 电脑回答知识问答（按难度有概率答错）
     const diseaseName = G.activeDisease.name;
     const kb = DISEASE_KNOWLEDGE[diseaseName];
-    const correctTreatment = kb.treatment.options.find(o => o.correct).text;
-    const correctSymptoms = kb.symptoms.options.filter(o => o.correct).map(o => o.text);
-    addLog(`电脑回答：治疗方法是「${correctTreatment}」，症状有「${correctSymptoms.join('」和「')}」✓`, 'log-info');
+    const errorRate = DIFFICULTY[G.difficulty].quizErrorRate || 0;
+
+    if (kb && errorRate > 0) {
+        // 治疗判定
+        const treatWrong = Math.random() < errorRate;
+        let compTreatText;
+        if (treatWrong) {
+            const wrongs = kb.treatment.options.filter(o => !o.correct);
+            compTreatText = wrongs[Math.floor(Math.random() * wrongs.length)].text;
+        } else {
+            compTreatText = kb.treatment.options.find(o => o.correct).text;
+        }
+        // 症状判定
+        const sympWrong = Math.random() < errorRate;
+        let compSympTexts;
+        if (sympWrong) {
+            const corrects = kb.symptoms.options.filter(o => o.correct);
+            const wrongs = kb.symptoms.options.filter(o => !o.correct);
+            // 1对 + 1错
+            compSympTexts = [
+                corrects[Math.floor(Math.random() * corrects.length)].text,
+                wrongs[Math.floor(Math.random() * wrongs.length)].text,
+            ];
+        } else {
+            compSympTexts = kb.symptoms.options.filter(o => o.correct).map(o => o.text);
+        }
+
+        const compAllCorrect = !treatWrong && !sympWrong;
+        const icon = compAllCorrect ? '✓' : '✗';
+        const cls = compAllCorrect ? 'log-info' : 'log-warn';
+        addLog(`电脑回答：治疗「${compTreatText}」，症状「${compSympTexts.join('」和「')}」${icon}`, cls);
+
+        if (!compAllCorrect) {
+            addLog('电脑答错了！轮到你继续攻击。', 'log-action');
+            renderAll();
+            await sleep(1200);
+            if (checkWinAfterPlay('computer')) return;
+            await phasePlayerAttack();
+            return;
+        }
+    } else {
+        // 困难难度或没有知识库：电脑全对
+        const correctTreatment = kb ? kb.treatment.options.find(o => o.correct).text : '—';
+        const correctSymptoms = kb ? kb.symptoms.options.filter(o => o.correct).map(o => o.text) : ['—'];
+        addLog(`电脑回答：治疗「${correctTreatment}」，症状「${correctSymptoms.join('」和「')}」✓`, 'log-info');
+    }
 
     renderAll();
     await sleep(1200);
@@ -345,6 +390,7 @@ function showQuizModal(diseaseName) {
     G.quizTreatment = null;
     G.quizSymptoms = [];
     G.quizStep = 1;
+    G.quizTreatmentCorrect = null;
 
     $('quiz-disease-name').textContent = `📋 ${diseaseName} 知识问答`;
     $('quiz-treatment-q').textContent = kb.treatment.question;
@@ -379,6 +425,12 @@ function showQuizModal(diseaseName) {
     $('quiz-step1-btn').disabled = true;
     $('quiz-step2-btn').style.display = '';
     $('quiz-hint1').textContent = '请选择1个治疗方法';
+    $('quiz-hint1').style.color = '';
+    // 恢复治疗选项可点击（上次可能被 goToQuizStep2 禁用了）
+    Array.from($('quiz-treatment-options').children).forEach(el => {
+        el.style.pointerEvents = '';
+        el.classList.remove('correct', 'wrong', 'selected');
+    });
     updateQuizStepIndicator(1);
     openModal('quiz-modal');
 }
@@ -395,15 +447,44 @@ function selectQuizTreatment(index) {
     $('quiz-hint1').textContent = '已选择，点击下一步';
 }
 
-// 步骤1→步骤2：治疗方法选好后，进入症状选择
-function goToQuizStep2() {
+// 步骤1→步骤2：先即时反馈治疗方法对错，再进入症状选择
+async function goToQuizStep2() {
     if (G.quizTreatment === null) return;
+    if (G.isProcessing) return;
+    G.isProcessing = true;
+
+    const kb = DISEASE_KNOWLEDGE[G.quizDisease];
+    const isCorrect = kb.treatment.options[G.quizTreatment].correct;
+    G.quizTreatmentCorrect = isCorrect;
+
+    // 禁用按钮防止重复点击
+    $('quiz-step1-btn').disabled = true;
+
+    // 高亮正确答案 + 玩家选择
+    Array.from($('quiz-treatment-options').children).forEach((el, i) => {
+        el.style.pointerEvents = 'none';  // 禁止再点
+        if (kb.treatment.options[i].correct) el.classList.add('correct');
+        else if (i === G.quizTreatment && !isCorrect) el.classList.add('wrong');
+    });
+
+    if (isCorrect) {
+        $('quiz-hint1').textContent = '✅ 治疗方法正确！';
+        $('quiz-hint1').style.color = 'var(--green)';
+    } else {
+        $('quiz-hint1').textContent = '❌ 治疗方法选错了';
+        $('quiz-hint1').style.color = 'var(--red)';
+    }
+
+    await sleep(1200);
+
+    // 切换到步骤2
     G.quizStep = 2;
     $('quiz-step1').style.display = 'none';
     $('quiz-step2').style.display = '';
     $('quiz-step2-btn').disabled = true;
     $('quiz-hint2').textContent = '请选择2个症状';
     updateQuizStepIndicator(2);
+    G.isProcessing = false;
 }
 
 // 更新步骤指示器UI
@@ -450,17 +531,17 @@ async function onQuizSubmit() {
     const diseaseName = G.quizDisease;
     const kb = DISEASE_KNOWLEDGE[diseaseName];
 
-    const treatmentCorrect = kb.treatment.options[G.quizTreatment].correct;
+    const treatmentCorrect = G.quizTreatmentCorrect === true;
     const symptomsCorrect = G.quizSymptoms.every(i => kb.symptoms.options[i].correct)
         && G.quizSymptoms.length === 2
         && kb.symptoms.options.filter((o, i) => o.correct && G.quizSymptoms.includes(i)).length === 2;
 
-    // 显示答案（两步都高亮）
+    // 显示症状结果 + 禁用点击
     highlightQuizAnswers(kb);
 
     if (treatmentCorrect && symptomsCorrect) {
         addLog('✅ 回答完全正确！轮到你出牌攻击。', 'log-action');
-        await sleep(1000);
+        await sleep(1200);
         closeModal('quiz-modal');
         onQuizPass();
     } else {
@@ -468,31 +549,33 @@ async function onQuizSubmit() {
         if (!treatmentCorrect) reason += '治疗方法选错';
         if (!symptomsCorrect) reason += (reason ? '，' : '') + '症状选错';
         addLog(`❌ 回答错误（${reason}），电脑继续攻击！`, 'log-error');
-        await sleep(1500);
+        await sleep(1800);
         closeModal('quiz-modal');
         onQuizFail();
     }
 }
 
 function highlightQuizAnswers(kb) {
-    // 显示步骤2（症状）以便用户看到完整结果
-    $('quiz-step1').style.display = 'none';
-    $('quiz-step2').style.display = '';
-    updateQuizStepIndicator(2);
-    // 高亮治疗选项
-    Array.from($('quiz-treatment-options').children).forEach((el, i) => {
-        el.classList.remove('selected');
-        if (kb.treatment.options[i].correct) el.classList.add('correct');
-        else if (i === G.quizTreatment && !kb.treatment.options[i].correct) el.classList.add('wrong');
-    });
-    // 高亮症状选项
+    // 高亮症状选项 + 禁用点击
     Array.from($('quiz-symptom-options').children).forEach((el, i) => {
-        el.classList.remove('selected');
+        el.style.pointerEvents = 'none';
         if (kb.symptoms.options[i].correct) el.classList.add('correct');
         else if (G.quizSymptoms.includes(i) && !kb.symptoms.options[i].correct) el.classList.add('wrong');
     });
     $('quiz-step2-btn').style.display = 'none';
-    $('quiz-hint2').textContent = '答案已显示';
+
+    // 汇总提示
+    const tOk = G.quizTreatmentCorrect === true;
+    const sOk = G.quizSymptoms.every(i => kb.symptoms.options[i].correct)
+        && G.quizSymptoms.length === 2
+        && kb.symptoms.options.filter((o, i) => o.correct && G.quizSymptoms.includes(i)).length === 2;
+    if (tOk && sOk) {
+        $('quiz-hint2').textContent = '✅ 全部正确！';
+        $('quiz-hint2').style.color = 'var(--green)';
+    } else {
+        $('quiz-hint2').textContent = '❌ 有错误，请看上方标注';
+        $('quiz-hint2').style.color = 'var(--red)';
+    }
 }
 
 async function onQuizPass() {
@@ -502,6 +585,7 @@ async function onQuizPass() {
     G.quizTreatment = null;
     G.quizSymptoms = [];
     G.quizStep = 1;
+    G.quizTreatmentCorrect = null;
     G.battleAttack = [];
     G.battleDefend = [];
     G.activeDisease = null;
@@ -519,6 +603,7 @@ async function onQuizFail() {
     G.quizTreatment = null;
     G.quizSymptoms = [];
     G.quizStep = 1;
+    G.quizTreatmentCorrect = null;
     G.battleAttack = [];
     G.battleDefend = [];
     G.activeDisease = null;

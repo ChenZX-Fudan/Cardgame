@@ -165,6 +165,8 @@ const DIFFICULTY = {
         vaccineUseChance: 0.3,
         // 防御时允许超出的等级余量 (越大越浪费)
         levelMargin: 3,
+        // 知识问答错误率 (治疗/症状各独立判定)
+        quizErrorRate: 0.3,
     },
     normal: {
         name: '普通',
@@ -173,6 +175,7 @@ const DIFFICULTY = {
         optimalDefense: true,
         vaccineUseChance: 0.7,
         levelMargin: 0,
+        quizErrorRate: 0.1,
     },
     hard: {
         name: '困难',
@@ -181,6 +184,7 @@ const DIFFICULTY = {
         optimalDefense: true,
         vaccineUseChance: 1.0,
         levelMargin: 0,
+        quizErrorRate: 0,
     },
 };
 
