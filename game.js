@@ -102,18 +102,27 @@ function startSingleGame(difficulty) {
 
 // ==================== 联机网络层 ====================
 
-function initHost() {
+// 生成随机四位房间号
+function generateRoomCode() {
+    return String(Math.floor(1000 + Math.random() * 9000));
+}
+
+function initHost(roomCode) {
     G.mode = 'online';
     G.role = 'host';
     G.connectionStatus = 'connecting';
     updateConnStatus();
     $('lobby-status').textContent = '正在创建房间...';
+    $('lobby-status').style.color = '';
 
-    G.peer = new Peer();
+
+    G.peer = new Peer(roomCode);
     G.peer.on('open', function(id) {
         G.roomCode = id;
         G.connectionStatus = 'offline';
         updateConnStatus();
+        $('input-host-room-code').style.display = 'none';
+        $('btn-random-code').style.display = 'none';
         $('btn-create-room').style.display = 'none';
         $('room-code-display').style.display = '';
         $('room-code').textContent = id;
@@ -125,8 +134,15 @@ function initHost() {
     });
     G.peer.on('error', function(err) {
         console.error('PeerJS error:', err);
-        $('lobby-status').textContent = '创建房间失败：' + err.message;
+        if (err.type === 'unavailable-id') {
+            $('lobby-status').textContent = '该房间号已被占用，换一个试试';
+        } else {
+            $('lobby-status').textContent = '创建房间失败：' + err.message;
+        }
         $('lobby-status').style.color = 'var(--red)';
+        G.connectionStatus = 'offline';
+        updateConnStatus();
+        $('btn-create-room').disabled = false;
     });
     G.peer.on('disconnected', function() {
         if (G.connectionStatus === 'online') onDisconnect();
@@ -1664,7 +1680,11 @@ document.addEventListener('DOMContentLoaded', () => {
         closeModal('mode-modal');
         openModal('lobby-modal');
         // Reset lobby UI
+        $('input-host-room-code').style.display = '';
+        $('input-host-room-code').value = '';
+        $('btn-random-code').style.display = '';
         $('btn-create-room').style.display = '';
+        $('btn-create-room').disabled = false;
         $('room-code-display').style.display = 'none';
         $('btn-copy-code').disabled = true;
         $('input-room-code').value = '';
@@ -1673,9 +1693,23 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // ===== 联机大厅 =====
+    $('btn-random-code').addEventListener('click', () => {
+        $('input-host-room-code').value = generateRoomCode();
+    });
     $('btn-create-room').addEventListener('click', () => {
+        var code = $('input-host-room-code').value.trim();
+        // 验证：只能是4位数字，空则随机生成
+        if (code && !/^\d{4}$/.test(code)) {
+            $('lobby-status').textContent = '房间号必须为4位数字';
+            $('lobby-status').style.color = 'var(--red)';
+            return;
+        }
+        if (!code) {
+            code = generateRoomCode();
+            $('input-host-room-code').value = code;
+        }
         $('btn-create-room').disabled = true;
-        initHost();
+        initHost(code);
     });
     $('btn-join-room').addEventListener('click', () => {
         var code = $('input-room-code').value.trim();

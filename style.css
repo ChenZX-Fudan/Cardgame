@@ -597,6 +597,34 @@ body.modal-open {
 .input-room:focus { border-color: var(--blue); outline: none; }
 .input-room::placeholder { color: var(--text-dim); letter-spacing: 0; }
 
+/* 创建房间——号码输入行 */
+.room-code-input-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+.input-room-short {
+    max-width: 160px;
+    text-align: center;
+    letter-spacing: 4px;
+    font-size: 1.2em;
+    font-weight: 700;
+}
+.btn-dice {
+    font-size: 1.4em;
+    padding: 10px 14px;
+    background: var(--bg-card);
+    border: 2px solid var(--border);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: border-color var(--transition), background var(--transition);
+}
+.btn-dice:hover {
+    border-color: var(--gold);
+    background: var(--gold-dark);
+}
+
 /* 大厅分隔线 */
 .lobby-divider {
     display: flex;
