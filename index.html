@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>瘟疫危机 - 卡牌对战</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ========== 模式选择弹窗 ========== -->
+<div id="mode-modal" class="modal show">
+  <div class="modal-content mode-panel">
+    <h1>🦠 瘟疫危机</h1>
+    <p class="subtitle">卡牌对战游戏</p>
+    <div class="divider"></div>
+    <div class="mode-options">
+      <button id="btn-single" class="mode-btn single">
+        <span class="mode-icon">🤖</span>
+        <span class="mode-name">单人模式</span>
+        <span class="mode-desc">与电脑AI对战</span>
+      </button>
+      <button id="btn-online" class="mode-btn online">
+        <span class="mode-icon">🌐</span>
+        <span class="mode-name">联机对战</span>
+        <span class="mode-desc">与好友实时对战</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ========== 难度选择弹窗 ========== -->
+<div id="difficulty-modal" class="modal">
+  <div class="modal-content difficulty-panel">
+    <h1>🦠 瘟疫危机</h1>
+    <p class="subtitle">卡牌对战游戏 — 玩家 vs 电脑</p>
+    <div class="divider"></div>
+    <h2>选择难度</h2>
+    <div class="difficulty-options">
+      <button class="diff-btn easy" data-diff="easy">
+        <span class="diff-icon">😊</span>
+        <span class="diff-name">简 单</span>
+        <span class="diff-desc">电脑随机出牌，适合新手</span>
+      </button>
+      <button class="diff-btn normal" data-diff="normal">
+        <span class="diff-icon">🤔</span>
+        <span class="diff-name">普 通</span>
+        <span class="diff-desc">电脑合理出牌，有一定策略</span>
+      </button>
+      <button class="diff-btn hard" data-diff="hard">
+        <span class="diff-icon">😈</span>
+        <span class="diff-name">困 难</span>
+        <span class="diff-desc">电脑最优出牌，极具挑战</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ========== 知识问答弹窗（两步：先治疗方法→再症状，解决微信滚动失效） ========== -->
+<div id="quiz-modal" class="modal">
+  <div class="modal-content quiz-panel">
+    <h2 id="quiz-disease-name"></h2>
+    <!-- 步骤指示器 -->
+    <div id="quiz-steps-indicator" class="quiz-steps">
+      <span id="quiz-step-dot1" class="step-dot active">1</span>
+      <span class="step-line"></span>
+      <span id="quiz-step-dot2" class="step-dot">2</span>
+    </div>
+    <!-- 步骤1：治疗方法 -->
+    <div id="quiz-step1" class="quiz-step">
+      <div class="quiz-section">
+        <h3>🧪 <span id="quiz-treatment-q"></span></h3>
+        <div id="quiz-treatment-options" class="quiz-options"></div>
+      </div>
+      <button id="quiz-step1-btn" class="btn btn-primary" disabled>下一步 →</button>
+      <p id="quiz-hint1" class="quiz-hint">请选择1个治疗方法</p>
+    </div>
+    <!-- 步骤2：症状 -->
+    <div id="quiz-step2" class="quiz-step" style="display:none">
+      <div class="quiz-section">
+        <h3>🤒 <span id="quiz-symptom-q"></span></h3>
+        <div id="quiz-symptom-options" class="quiz-options"></div>
+      </div>
+      <button id="quiz-step2-btn" class="btn btn-primary" disabled>提交答案</button>
+      <p id="quiz-hint2" class="quiz-hint">请选择2个症状</p>
+    </div>
+  </div>
+</div>
+
+<!-- ========== 联机大厅弹窗 ========== -->
+<div id="lobby-modal" class="modal">
+  <div class="modal-content lobby-panel">
+    <h2>🌐 联机对战</h2>
+    <div id="lobby-create">
+      <p class="room-code-label">自定义房间号（四位数字，留空则随机）</p>
+      <div class="room-code-input-row">
+        <input id="input-host-room-code" class="input-room input-room-short" placeholder="如 9527" maxlength="4">
+        <button id="btn-random-code" class="btn btn-sm btn-dice">🎲 随机</button>
+      </div>
+      <button id="btn-create-room" class="btn btn-primary">创建房间</button>
+      <div id="room-code-display" style="display:none">
+        <p class="room-code-label">房间号（告诉对方即可加入）</p>
+        <p id="room-code" class="room-code-text"></p>
+        <button id="btn-copy-code" class="btn btn-sm">📋 复制</button>
+      </div>
+    </div>
+    <div class="lobby-divider"><span>— 或 —</span></div>
+    <div id="lobby-join">
+      <input id="input-room-code" class="input-room" placeholder="输入房间码">
+      <button id="btn-join-room" class="btn btn-primary">加入房间</button>
+    </div>
+    <p id="lobby-status" class="lobby-status">请创建或加入房间</p>
+    <button id="btn-back-mode" class="btn btn-sm btn-back">← 返回</button>
+  </div>
+</div>
+
+<!-- ========== 游戏结束弹窗 ========== -->
+<div id="gameover-modal" class="modal">
+  <div class="modal-content gameover-panel">
+    <div id="gameover-icon"></div>
+    <h2 id="gameover-title"></h2>
+    <p id="gameover-detail"></p>
+    <button id="gameover-restart" class="btn btn-primary">再来一局</button>
+  </div>
+</div>
+
+<!-- ========== 主游戏界面 ========== -->
+<div id="game-container">
+
+  <!-- 顶部信息栏 -->
+  <header id="game-header">
+    <div class="header-left">
+      <h1>🦠 瘟疫危机</h1>
+      <span id="difficulty-badge" class="badge"></span>
+        <span id="conn-status" class="conn-status" style="display:none"></span>
+    </div>
+    <div class="header-center">
+      <div id="turn-indicator" class="turn-info"></div>
+    </div>
+    <div class="header-right">
+      <div class="deck-info">
+        <div class="deck-pile">🂠</div>
+        <span id="deck-count">剩余: 24</span>
+      </div>
+      <button id="btn-restart" class="btn btn-sm">🔄 重新开始</button>
+    </div>
+  </header>
+
+  <!-- 电脑区域 -->
+  <section id="computer-area">
+    <div class="player-label">
+      <span class="player-avatar">💻</span>
+      <span class="player-name">电脑</span>
+      <span id="computer-card-count" class="card-count">手牌: 5</span>
+    </div>
+    <div id="computer-hand" class="hand-area"></div>
+  </section>
+
+  <!-- 对战区域 -->
+  <section id="battle-area">
+    <div id="battle-log" class="battle-log">
+      <p class="log-placeholder">游戏开始！请从手牌中选择一张<b>疾病卡</b>打出。</p>
+    </div>
+    <div id="battle-cards" class="battle-cards">
+      <!-- 动态显示打出的牌 -->
+      <div class="battle-slot" id="slot-attack">
+        <span class="slot-label">攻击方</span>
+        <div class="slot-cards"></div>
+      </div>
+      <div class="battle-vs">VS</div>
+      <div class="battle-slot" id="slot-defend">
+        <span class="slot-label">防御方</span>
+        <div class="slot-cards"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 玩家区域 -->
+  <section id="player-area">
+    <div class="player-label">
+      <span class="player-avatar">🧑</span>
+      <span class="player-name">你</span>
+      <span id="player-card-count" class="card-count">手牌: 5</span>
+      <button id="btn-confirm" class="btn btn-action" disabled>确认出牌</button>
+    </div>
+    <div id="player-hand" class="hand-area"></div>
+    <div id="selected-cards" class="selected-cards">
+      <span class="selected-label">已选待出：</span>
+      <div id="selected-list" class="selected-list"></div>
+    </div>
+  </section>
+
+</div>
+
+<script src="data.js"></script>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script src="game.js"></script>
+</body>
+</html>
