@@ -509,6 +509,141 @@ body.modal-open {
 .card.anim-draw { animation: cardDraw 0.3s ease; }
 .pulse { animation: pulse 0.8s ease infinite; }
 
+
+
+/* --- 模式选择面板 --- */
+.mode-panel { text-align: center; }
+.mode-panel h1 { font-size: 2.2em; margin-bottom: 4px; }
+.mode-panel .subtitle { color: var(--text-dim); font-size: 0.95em; margin-bottom: 8px; }
+
+.mode-options {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+.mode-btn {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 18px 22px;
+    border: 2px solid var(--border);
+    border-radius: 14px;
+    background: var(--bg-card);
+    color: var(--text);
+    cursor: pointer;
+    transition: all var(--transition);
+    text-align: left;
+    font-family: inherit;
+    font-size: 1em;
+}
+.mode-btn:hover { transform: translateX(6px); }
+.mode-btn.single:hover { border-color: var(--green); background: var(--green-dark); }
+.mode-btn.online:hover { border-color: var(--blue); background: var(--blue-dark); }
+.mode-btn .mode-icon { font-size: 2.2em; }
+.mode-btn .mode-name { font-size: 1.2em; font-weight: 700; min-width: 80px; }
+.mode-btn .mode-desc { color: var(--text-dim); font-size: 0.85em; }
+
+/* --- 联机大厅面板 --- */
+.lobby-panel { text-align: center; }
+.lobby-panel h2 { font-size: 1.4em; margin-bottom: 20px; color: var(--blue); }
+
+#lobby-create, #lobby-join {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+
+/* 房间码显示 */
+#room-code-display {
+    animation: fadeIn 0.4s ease;
+    margin-top: 8px;
+}
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-8px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+.room-code-label { color: var(--text-dim); font-size: 0.85em; margin: 0; }
+.room-code-text {
+    font-size: 1.8em;
+    font-weight: 900;
+    letter-spacing: 3px;
+    color: var(--gold);
+    background: var(--gold-dark);
+    padding: 8px 20px;
+    border-radius: 10px;
+    border: 2px dashed var(--gold);
+    margin: 6px 0;
+    word-break: break-all;
+    user-select: all;
+}
+
+/* 房间码输入 */
+.input-room {
+    width: 100%;
+    max-width: 300px;
+    padding: 10px 14px;
+    border: 2px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-card);
+    color: var(--text);
+    font-size: 1em;
+    font-family: inherit;
+    text-align: center;
+    letter-spacing: 2px;
+    transition: border-color var(--transition);
+}
+.input-room:focus { border-color: var(--blue); outline: none; }
+.input-room::placeholder { color: var(--text-dim); letter-spacing: 0; }
+
+/* 大厅分隔线 */
+.lobby-divider {
+    display: flex;
+    align-items: center;
+    margin: 16px 0;
+    color: var(--text-dim);
+    font-size: 0.9em;
+}
+.lobby-divider::before, .lobby-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+}
+.lobby-divider span { padding: 0 14px; }
+
+.lobby-status {
+    color: var(--text-dim);
+    font-size: 0.9em;
+    margin: 14px 0 8px;
+    min-height: 20px;
+}
+.btn-back {
+    margin-top: 4px;
+    padding: 8px 16px;
+    font-size: 0.85em;
+    background: transparent;
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all var(--transition);
+    font-family: inherit;
+}
+.btn-back:hover { color: var(--text); border-color: var(--text-dim); }
+
+/* --- 连接状态指示器 --- */
+.conn-status {
+    font-size: 0.7em;
+    padding: 3px 8px;
+    border-radius: 10px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+.conn-status.connected { background: var(--green-dark); color: var(--green); }
+.conn-status.disconnected { background: var(--red-dark); color: var(--red); }
+
 /* --- 响应式 --- */
 @media (max-width: 768px) {
     #game-container { padding: 8px; gap: 6px; }

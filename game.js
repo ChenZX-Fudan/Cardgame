@@ -34,11 +34,25 @@ const G = {
     quizStep: 1,           // 当前问答步骤：1=治疗方法, 2=症状
     quizTreatmentCorrect: null, // 步骤1治疗是否答对 (null=未判定)
     isProcessing: false,   // 防止重复点击
+
+    // ---- 联机模式 ----
+    mode: 'single',            // 'single' | 'online'
+    role: null,                // 'host' | 'guest' (联机时)
+    peer: null,                // PeerJS 实例
+    conn: null,                // DataConnection
+    roomCode: '',              // 房间码 (Peer ID)
+    opponentHandCount: 0,      // 对手手牌数
+    _deckCount: 0,             // guest的牌堆计数（guest不知道完整牌堆）
+    _pendingDrawResolve: null, // guest等待抽牌的回调
+    heartbeatTimer: null,      // 心跳定时器
+    lastPongTime: 0,           // 上次收到pong的时间
+    connectionStatus: 'offline', // 'offline'|'connecting'|'online'|'disconnected'
 };
 
 // ==================== 初始化 ====================
 
-function startGame(difficulty) {
+function startSingleGame(difficulty) {
+    G.mode = 'single';
     G.difficulty = difficulty;
     G.deck = shuffle(createDeck());
     G.playerHand = [];
@@ -55,6 +69,9 @@ function startGame(difficulty) {
     G.quizStep = 1;
     G.quizTreatmentCorrect = null;
     G.isProcessing = false;
+    G.role = null;
+    // 隐藏联机状态指示器
+    $('conn-status').style.display = 'none';
 
     // 发牌: 各5张
     for (let i = 0; i < 5; i++) {
@@ -81,6 +98,558 @@ function startGame(difficulty) {
 
     // 进入第一个阶段
     phasePlayerAttack();
+}
+
+// ==================== 联机网络层 ====================
+
+function initHost() {
+    G.mode = 'online';
+    G.role = 'host';
+    G.connectionStatus = 'connecting';
+    updateConnStatus();
+    $('lobby-status').textContent = '正在创建房间...';
+
+    G.peer = new Peer();
+    G.peer.on('open', function(id) {
+        G.roomCode = id;
+        G.connectionStatus = 'offline';
+        updateConnStatus();
+        $('btn-create-room').style.display = 'none';
+        $('room-code-display').style.display = '';
+        $('room-code').textContent = id;
+        $('btn-copy-code').disabled = false;
+        $('lobby-status').textContent = '等待对手加入...';
+    });
+    G.peer.on('connection', function(conn) {
+        onConnectionOpen(conn, 'host');
+    });
+    G.peer.on('error', function(err) {
+        console.error('PeerJS error:', err);
+        $('lobby-status').textContent = '创建房间失败：' + err.message;
+        $('lobby-status').style.color = 'var(--red)';
+    });
+    G.peer.on('disconnected', function() {
+        if (G.connectionStatus === 'online') onDisconnect();
+    });
+}
+
+function initGuest(roomCode) {
+    G.mode = 'online';
+    G.role = 'guest';
+    G.roomCode = roomCode;
+    G.connectionStatus = 'connecting';
+    updateConnStatus();
+    $('lobby-status').textContent = '正在连接房间...';
+
+    G.peer = new Peer();
+    G.peer.on('open', function(id) {
+        var conn = G.peer.connect(roomCode, { reliable: true });
+        conn.on('open', function() { onConnectionOpen(conn, 'guest'); });
+        conn.on('error', function(err) {
+            console.error('Connection error:', err);
+            $('lobby-status').textContent = '连接失败，请检查房间码是否正确';
+            $('lobby-status').style.color = 'var(--red)';
+            G.connectionStatus = 'offline';
+            updateConnStatus();
+        });
+    });
+    G.peer.on('error', function(err) {
+        console.error('PeerJS error:', err);
+        if (err.type === 'peer-unavailable') {
+            $('lobby-status').textContent = '房间不存在或已过期';
+        } else {
+            $('lobby-status').textContent = '连接失败：' + err.message;
+        }
+        $('lobby-status').style.color = 'var(--red)';
+        G.connectionStatus = 'offline';
+        updateConnStatus();
+    });
+}
+
+function onConnectionOpen(conn, myRole) {
+    G.conn = conn;
+    G.role = myRole;
+    G.connectionStatus = 'online';
+    G.lastPongTime = Date.now();
+    updateConnStatus();
+
+    conn.on('data', function(data) { onPeerMessage(data); });
+    conn.on('close', function() { onDisconnect(); });
+    conn.on('error', function() { onDisconnect(); });
+
+    startHeartbeat();
+
+    if (myRole === 'host') {
+        $('lobby-status').textContent = '对手已连接！正在开始游戏...';
+        $('lobby-status').style.color = 'var(--green)';
+        setTimeout(function() { startOnlineGame(); }, 800);
+    } else {
+        $('lobby-status').textContent = '已连接！等待房主开始游戏...';
+        $('lobby-status').style.color = 'var(--green)';
+    }
+}
+
+function startOnlineGame() {
+    G.deck = shuffle(createDeck());
+    G.playerHand = [];
+    G.computerHand = [];
+    G.phase = 'player_attack';
+    G.attacker = 'host';
+    G.activeDisease = null;
+    G.playerSelected = [];
+    G.battleAttack = [];
+    G.battleDefend = [];
+    G.quizDisease = null;
+    G.quizTreatment = null;
+    G.quizSymptoms = [];
+    G.quizStep = 1;
+    G.quizTreatmentCorrect = null;
+    G.isProcessing = false;
+    G.opponentHandCount = 5;
+    G._deckCount = G.deck.length;
+
+    for (var i = 0; i < 5; i++) {
+        G.playerHand.push(G.deck.pop());
+        G.computerHand.push(G.deck.pop());
+    }
+
+    closeModal('lobby-modal');
+    updateOpponentLabel();
+
+    var guestHand = G.computerHand.map(function(c) { return Object.assign({}, c); });
+    G.conn.send({
+        type: 'init',
+        yourHand: guestHand,
+        deckCount: G.deck.length,
+    });
+
+    $('battle-log').innerHTML = '';
+    $('difficulty-badge').textContent = '联机';
+    $('difficulty-badge').className = 'badge online';
+    $('conn-status').style.display = '';
+
+    renderAll();
+    addLog('联机对战开始！你是先手。', 'log-action');
+    addLog('房间码：' + G.roomCode, 'log-info');
+
+    phaseOnlineAttack();
+}
+
+function handleInit(data) {
+    G.playerHand = data.yourHand;
+    G.computerHand = [];
+    G.opponentHandCount = 5;
+    G._deckCount = data.deckCount;
+    G.phase = 'opponent_turn';
+    G.attacker = 'host';
+    G.activeDisease = null;
+    G.playerSelected = [];
+    G.battleAttack = [];
+    G.battleDefend = [];
+    G.quizDisease = null;
+    G.quizTreatment = null;
+    G.quizSymptoms = [];
+    G.quizStep = 1;
+    G.quizTreatmentCorrect = null;
+    G.isProcessing = false;
+
+    closeModal('lobby-modal');
+    updateOpponentLabel();
+
+    $('battle-log').innerHTML = '';
+    $('difficulty-badge').textContent = '联机';
+    $('difficulty-badge').className = 'badge online';
+    $('conn-status').style.display = '';
+
+    renderAll();
+    addLog('联机对战开始！对手先手。', 'log-action');
+    addLog('房间码：' + G.roomCode, 'log-info');
+    phaseOnlineWaiting();
+}
+
+function startHeartbeat() {
+    stopHeartbeat();
+    G.heartbeatTimer = setInterval(function() {
+        if (G.conn && G.conn.open) {
+            sendToOpponent({ type: 'ping' });
+        }
+        if (Date.now() - G.lastPongTime > 30000 && G.connectionStatus === 'online') {
+            onDisconnect();
+        }
+    }, 5000);
+}
+
+function stopHeartbeat() {
+    if (G.heartbeatTimer) {
+        clearInterval(G.heartbeatTimer);
+        G.heartbeatTimer = null;
+    }
+}
+
+function sendToOpponent(msg) {
+    if (G.conn && G.conn.open) {
+        G.conn.send(msg);
+    }
+}
+
+function onDisconnect() {
+    if (G.connectionStatus === 'disconnected') return;
+    G.connectionStatus = 'disconnected';
+    updateConnStatus();
+    stopHeartbeat();
+    if (G.phase !== 'init' && G.phase !== 'game_over' && G.mode === 'online') {
+        addLog('对手已断开连接！', 'log-error');
+        setTimeout(function() {
+            if (G.phase !== 'game_over') endGame('player', 'disconnect');
+        }, 1500);
+    }
+}
+
+function cleanupPeer() {
+    stopHeartbeat();
+    if (G.conn) { G.conn.close(); G.conn = null; }
+    if (G.peer) { G.peer.destroy(); G.peer = null; }
+    G.connectionStatus = 'offline';
+    G.mode = 'single';
+    G.role = null;
+    $('conn-status').style.display = 'none';
+}
+
+function updateConnStatus() {
+    var dot = $('conn-status');
+    dot.className = 'conn-status ' + G.connectionStatus;
+    var labels = {
+        online: '已连接',
+        connecting: '连接中',
+        disconnected: '已断开',
+        offline: '等待中'
+    };
+    dot.textContent = labels[G.connectionStatus] || '';
+}
+
+function updateOpponentLabel() {
+    var el = document.querySelector('#computer-area .player-name');
+    if (el) el.textContent = '对手';
+    var label2 = document.querySelector('#computer-area .player-avatar');
+    if (label2) label2.textContent = '👤';
+}
+
+// ==================== 联机消息处理 ====================
+
+function onPeerMessage(data) {
+    G.lastPongTime = Date.now();
+    switch (data.type) {
+        case 'init':       handleInit(data); break;
+        case 'attack':     handleOpponentAttack(data); break;
+        case 'defense':    handleOpponentDefense(data); break;
+        case 'draw':       handleGuestDrawRequest(data); break;
+        case 'draw_result': handleDrawResult(data); break;
+        case 'host_drew':  handleHostDrew(data); break;
+        case 'game_over':  handleGameOverMsg(data); break;
+        case 'pong':       G.lastPongTime = Date.now(); break;
+    }
+}
+
+function handleOpponentAttack(data) {
+    G.activeDisease = data.card;
+    G.battleAttack = [data.card];
+    G.battleDefend = [];
+    G.opponentHandCount = data.handCount;
+    if (G.role === 'host') {
+        G._deckCount = G.deck.length;
+        // 从对手手牌中移除已打出的疾病卡
+        var idx = G.computerHand.findIndex(function(c) { return c.id === data.card.id; });
+        if (idx >= 0) G.computerHand.splice(idx, 1);
+    } else {
+        G._deckCount = data.deckCount;
+    }
+    G.playerSelected = [];
+    addLog(data.log || '对手打出了疾病卡！请应对。', 'log-action');
+    renderAll();
+    phaseOnlineDefend();
+}
+
+function handleOpponentDefense(data) {
+    G.battleDefend = data.cards;
+    G.opponentHandCount = data.handCount;
+    if (G.role === 'host') {
+        G._deckCount = G.deck.length;
+        // 从对手手牌中移除已打出的治疗卡
+        if (data.cardIds) {
+            data.cardIds.forEach(function(id) {
+                var idx = G.computerHand.findIndex(function(c) { return c.id === id; });
+                if (idx >= 0) G.computerHand.splice(idx, 1);
+            });
+        }
+    }
+    addLog(data.log || '对手已完成应对。', data.quizPassed ? 'log-info' : 'log-warn');
+    renderAll();
+
+    if (data.handCount === 0) {
+        endGame('opponent', 'empty_hand');
+        return;
+    }
+
+    if (data.quizPassed) {
+        phaseOnlineWaiting();
+    } else {
+        phaseOnlineAttack();
+    }
+}
+
+function handleGuestDrawRequest(data) {
+    var needType = data.needType;
+    var targetLevel = data.targetLevel || 0;
+    var drawnCards = [];
+    var hand = G.computerHand;
+
+    while (true) {
+        var conditionMet = false;
+        if (needType === 'disease') conditionMet = hasDiseaseCard(hand);
+        else conditionMet = canMatchLevel(hand, targetLevel);
+        if (conditionMet) break;
+
+        if (G.deck.length === 0) {
+            G.conn.send({ type: 'game_over', winner: 'host', reason: 'deck_empty' });
+            endGame('player', 'deck_empty');
+            return;
+        }
+
+        var card = G.deck.pop();
+        hand.push(card);
+        drawnCards.push(card);
+    }
+
+    G.opponentHandCount = hand.length;
+    G._deckCount = G.deck.length;
+    renderDeckCount();
+
+    G.conn.send({
+        type: 'draw_result',
+        cards: drawnCards,
+        deckCount: G.deck.length,
+    });
+}
+
+function handleDrawResult(data) {
+    for (var i = 0; i < data.cards.length; i++) {
+        G.playerHand.push(data.cards[i]);
+    }
+    G._deckCount = data.deckCount;
+    renderAll();
+    if (G._pendingDrawResolve) {
+        G._pendingDrawResolve(true);
+        G._pendingDrawResolve = null;
+    }
+}
+
+function handleHostDrew(data) {
+    G._deckCount = data.deckCount;
+    G.opponentHandCount = data.handCount;
+    renderDeckCount();
+    renderCardCounts();
+}
+
+function handleGameOverMsg(data) {
+    endGame(data.winner === G.role ? 'player' : 'computer', data.reason);
+}
+
+// ==================== 联机阶段函数 ====================
+
+async function phaseOnlineAttack() {
+    if (G.phase === 'game_over') return;
+    G.phase = 'player_attack';
+    G.attacker = G.role;
+    G.activeDisease = null;
+    G.playerSelected = [];
+    G.battleAttack = [];
+    G.battleDefend = [];
+    renderAll();
+
+    if (!hasDiseaseCard(G.playerHand)) {
+        addLog('你没有疾病卡，正在抽牌...', 'log-warn');
+        var ok = await onlineDrawLoop('player', 'disease', 0);
+        if (!ok) return;
+    }
+
+    $('turn-indicator').innerHTML = '⚔️ <b>你的回合 — 请选择一张疾病卡攻击</b>';
+    addLog('请从手牌中选择一张<b>疾病卡</b>打出。', 'log-action');
+    enablePlayerSelect('disease');
+}
+
+async function phaseOnlineDefend() {
+    if (G.phase === 'game_over') return;
+    G.phase = 'player_defend';
+    G.playerSelected = [];
+    G.battleDefend = [];
+    renderAll();
+
+    var targetLevel = G.activeDisease.level;
+
+    if (!canMatchLevel(G.playerHand, targetLevel)) {
+        addLog('你的手牌无法应对，正在抽牌...', 'log-warn');
+        var ok = await onlineDrawLoop('player', 'defense', targetLevel);
+        if (!ok) return;
+    }
+
+    $('turn-indicator').innerHTML = '🛡️ 请选择治疗卡应对 <b>' + G.activeDisease.name + '</b>（需 ≥' + targetLevel + '级）';
+    addLog('请选择治疗卡/时间卡/疫苗，总等级需 ≥ ' + targetLevel + '。', 'log-action');
+    enablePlayerSelect('defense');
+}
+
+async function phaseOnlineWaiting() {
+    G.phase = 'opponent_turn';
+    disablePlayerSelect();
+    $('turn-indicator').textContent = '⏳ 等待对手操作...';
+    renderAll();
+}
+
+async function onlineDrawLoop(who, needType, targetLevel) {
+    G.isProcessing = true;
+    var hand = G.playerHand;
+    var name = '你';
+
+    if (G.role === 'host') {
+        var totalDrew = 0;
+        while (true) {
+            var conditionMet = false;
+            if (needType === 'disease') conditionMet = hasDiseaseCard(hand);
+            else conditionMet = canMatchLevel(hand, targetLevel);
+
+            if (conditionMet) {
+                if (totalDrew > 0) addLog(name + '抽到了需要的卡牌。', 'log-info');
+                break;
+            }
+
+            if (G.deck.length === 0) {
+                addLog('牌堆已空，' + name + '无法出牌！', 'log-error');
+                await sleep(600);
+                endGame('opponent', 'deck_empty');
+                G.isProcessing = false;
+                return false;
+            }
+
+            hand.push(G.deck.pop());
+            totalDrew++;
+            addLog(name + '抽到了一张牌。', 'log-info');
+            G._deckCount = G.deck.length;
+            renderAll();
+            await sleep(500);
+        }
+        if (totalDrew > 0) {
+            sendToOpponent({ type: 'host_drew', deckCount: G.deck.length, handCount: G.playerHand.length });
+        }
+    } else {
+        sendToOpponent({ type: 'draw', needType: needType, targetLevel: targetLevel });
+        addLog('正在等待抽牌...', 'log-info');
+        var ok = await new Promise(function(resolve) { G._pendingDrawResolve = resolve; });
+        if (!ok) { G.isProcessing = false; return false; }
+    }
+
+    renderAll();
+    G.isProcessing = false;
+    return true;
+}
+
+// ==================== 联机确认操作 ====================
+
+async function onlineConfirmAttack() {
+    G.isProcessing = true;
+    var card = G.playerSelected[0];
+    var idx = G.playerHand.findIndex(function(c) { return c.id === card.id; });
+    G.playerHand.splice(idx, 1);
+    G.activeDisease = card;
+    G.battleAttack = [card];
+    G.playerSelected = [];
+    disablePlayerSelect();
+
+    addLog('你打出疾病卡「<b>' + card.name + '</b>」（等级 ' + card.level + '）', 'log-action');
+    $('turn-indicator').textContent = '你打出 ' + card.name + '（等级 ' + card.level + '）';
+    renderAll();
+    await sleep(600);
+
+    if (checkWinAfterPlay('player')) { G.isProcessing = false; return; }
+
+    sendToOpponent({
+        type: 'attack',
+        card: { id: card.id, name: card.name, type: card.type, level: card.level, image: card.image },
+        deckCount: G.role === 'host' ? G.deck.length : G._deckCount,
+        handCount: G.playerHand.length,
+        log: '对手打出疾病卡「<b>' + card.name + '</b>」（等级 ' + card.level + '），请应对！',
+    });
+
+    G.isProcessing = false;
+    await phaseOnlineWaiting();
+}
+
+async function onlineConfirmDefend() {
+    var targetLevel = G.activeDisease.level;
+    var effLevel = calcEffectiveLevel(G.playerSelected);
+
+    if (effLevel < targetLevel) {
+        addLog('总等级 ' + effLevel + ' 不足 ' + targetLevel + '，请选择更多卡牌。', 'log-warn');
+        return;
+    }
+
+    G.isProcessing = true;
+    G.battleDefend = [].concat(G.playerSelected);
+
+    G.playerSelected.forEach(function(c) {
+        var idx = G.playerHand.findIndex(function(h) { return h.id === c.id; });
+        if (idx >= 0) G.playerHand.splice(idx, 1);
+    });
+    G.playerSelected = [];
+    disablePlayerSelect();
+
+    var hasVaccine = G.battleDefend.some(function(c) { return c.type === 'special'; });
+    var vaccineNote = hasVaccine ? '（疫苗翻倍！）' : '';
+    addLog('你打出 ' + G.battleDefend.map(function(c) { return c.name; }).join(' + ') + '，有效等级 ' + effLevel + ' ' + vaccineNote, 'log-action');
+    $('turn-indicator').textContent = '你的应对等级: ' + effLevel + ' ≥ ' + targetLevel + ' ✓';
+    renderAll();
+    await sleep(600);
+
+    if (checkWinAfterPlay('player')) { G.isProcessing = false; return; }
+
+    G.quizDisease = G.activeDisease.name;
+    G.isProcessing = false;
+    await phasePlayerQuiz();
+}
+
+// ==================== 联机问答结果处理 ====================
+
+async function onlineOnQuizPass() {
+    G.phase = 'player_attack';
+    G.attacker = G.role;
+    G.quizDisease = null;
+    G.quizTreatment = null;
+    G.quizSymptoms = [];
+    G.quizStep = 1;
+    G.quizTreatmentCorrect = null;
+    G.battleAttack = [];
+    G.battleDefend = [];
+    G.activeDisease = null;
+    G.playerSelected = [];
+    G.isProcessing = false;
+    renderAll();
+    await sleep(400);
+    await phaseOnlineAttack();
+}
+
+async function onlineOnQuizFail() {
+    G.phase = 'opponent_turn';
+    G.quizDisease = null;
+    G.quizTreatment = null;
+    G.quizSymptoms = [];
+    G.quizStep = 1;
+    G.quizTreatmentCorrect = null;
+    G.battleAttack = [];
+    G.battleDefend = [];
+    G.activeDisease = null;
+    G.playerSelected = [];
+    G.isProcessing = false;
+    renderAll();
+    await sleep(400);
+    await phaseOnlineWaiting();
 }
 
 // ==================== 阶段调度 ====================
@@ -312,9 +881,17 @@ function onPlayerConfirm() {
     if (G.playerSelected.length === 0) return;
 
     if (G.phase === 'player_attack') {
-        confirmPlayerAttack();
+        if (G.mode === 'online') {
+            onlineConfirmAttack();
+        } else {
+            confirmPlayerAttack();
+        }
     } else if (G.phase === 'player_defend') {
-        confirmPlayerDefend();
+        if (G.mode === 'online') {
+            onlineConfirmDefend();
+        } else {
+            confirmPlayerDefend();
+        }
     }
 }
 
@@ -539,19 +1116,40 @@ async function onQuizSubmit() {
     // 显示症状结果 + 禁用点击
     highlightQuizAnswers(kb);
 
+    // 联机模式：发送防御结果给对手
+    if (G.mode === 'online') {
+        sendToOpponent({
+            type: 'defense',
+            cards: G.battleDefend.map(function(c) { return { name: c.name, type: c.type, level: c.level, image: c.image }; }),
+            cardIds: G.battleDefend.map(function(c) { return c.id; }),
+            effLevel: calcEffectiveLevel(G.battleDefend),
+            handCount: G.playerHand.length,
+            quizPassed: treatmentCorrect && symptomsCorrect,
+            log: (treatmentCorrect && symptomsCorrect) ? '对手防御成功，问答通过！' : '对手防御成功，但问答失败，继续进攻！',
+        });
+    }
+
     if (treatmentCorrect && symptomsCorrect) {
         addLog('✅ 回答完全正确！轮到你出牌攻击。', 'log-action');
         await sleep(1200);
         closeModal('quiz-modal');
-        onQuizPass();
+        if (G.mode === 'online') {
+            onlineOnQuizPass();
+        } else {
+            onQuizPass();
+        }
     } else {
         let reason = '';
         if (!treatmentCorrect) reason += '治疗方法选错';
         if (!symptomsCorrect) reason += (reason ? '，' : '') + '症状选错';
-        addLog(`❌ 回答错误（${reason}），电脑继续攻击！`, 'log-error');
+        addLog(`❌ 回答错误（${reason}），对手继续攻击！`, 'log-error');
         await sleep(1800);
         closeModal('quiz-modal');
-        onQuizFail();
+        if (G.mode === 'online') {
+            onlineOnQuizFail();
+        } else {
+            onQuizFail();
+        }
     }
 }
 
@@ -656,6 +1254,10 @@ async function drawLoop(who, needType, targetLevel) {
         const card = G.deck.pop();
         hand.push(card);
         addLog(`${name}抽到了一张牌。`, 'log-info');
+        // 联机host模式：通知对手抽牌（裁剪对手的牌堆副本）
+        if (G.mode === 'online' && G.role === 'host' && who === 'player') {
+            sendToOpponent({ type: 'host_drew', deckCount: G.deck.length, handCount: G.playerHand.length });
+        }
         renderAll();
         await sleep(fastDelay);
     }
@@ -750,7 +1352,17 @@ function findAttackCard(hand, difficulty) {
 // ==================== 胜负判定 ====================
 
 function checkWinAfterPlay(who) {
-    const hand = who === 'player' ? G.playerHand : G.computerHand;
+    var hand;
+    if (G.mode === 'online') {
+        hand = G.playerHand;
+        if (hand.length === 0) {
+            sendToOpponent({ type: 'game_over', winner: G.role, reason: 'empty_hand' });
+            endGame('player', 'empty_hand');
+            return true;
+        }
+        return false;
+    }
+    hand = who === 'player' ? G.playerHand : G.computerHand;
     if (hand.length === 0) {
         endGame(who, 'empty_hand');
         return true;
@@ -762,24 +1374,39 @@ function endGame(winner, reason) {
     G.phase = 'game_over';
     disablePlayerSelect();
     G.playerSelected = [];
+    cleanupPeer();
     renderAll();
 
-    const isPlayerWin = winner === 'player';
+    var isPlayerWin = winner === 'player';
+    var loserLabel = G.mode === 'online' ? '对手' : '电脑';
+
     $('gameover-icon').textContent = isPlayerWin ? '🎉' : '😞';
     $('gameover-title').textContent = isPlayerWin ? '恭喜，你赢了！' : '很遗憾，你输了。';
     $('gameover-title').style.color = isPlayerWin ? 'var(--green)' : 'var(--red)';
 
-    let detail = '';
+    var detail = '';
     if (reason === 'empty_hand') {
-        detail = isPlayerWin ? '你打出了所有手牌！' : '电脑打出了所有手牌。';
+        detail = isPlayerWin ? '你打出了所有手牌！' : loserLabel + '打出了所有手牌。';
+    } else if (reason === 'disconnect') {
+        detail = '对手断开连接，你获胜了！';
+        isPlayerWin = true;
     } else if (reason === 'deck_empty') {
         detail = '牌堆耗尽，无法继续出牌。';
+    } else if (reason === 'disconnect') {
+        detail = '对手断开连接，你赢了！';
+        isPlayerWin = true;
+        $('gameover-title').textContent = '对手断开了连接';
+        $('gameover-title').style.color = 'var(--gold)';
+        $('gameover-icon').textContent = '🔌';
+        addLog('对手断开连接，你获胜！', 'log-action');
     }
     $('gameover-detail').textContent = detail;
     openModal('gameover-modal');
 
     $('turn-indicator').textContent = isPlayerWin ? '🏆 你赢了！' : '💀 你输了...';
-    addLog(isPlayerWin ? '🎉 恭喜获胜！' : '💀 败北...再来一局吧！', isPlayerWin ? 'log-action' : 'log-error');
+    if (reason !== 'disconnect') {
+        addLog(isPlayerWin ? '🎉 恭喜获胜！' : '💀 败北...再来一局吧！', isPlayerWin ? 'log-action' : 'log-error');
+    }
 }
 
 // ==================== UI渲染 ====================
@@ -798,8 +1425,13 @@ function renderHand(who) {
     container.innerHTML = '';
 
     if (who === 'computer') {
-        // 电脑手牌显示背面
-        hand.forEach((card, i) => {
+        // 对手手牌显示背面（单人=电脑，联机=对手）
+        var oppHand = hand;
+        if (G.mode === 'online' && G.role === 'guest') {
+            // Guest only knows opponent hand count
+            oppHand = Array(G.opponentHandCount).fill(null);
+        }
+        oppHand.forEach((card, i) => {
             const div = document.createElement('div');
             div.className = 'card card-back';
             div.style.animationDelay = `${i * 0.03}s`;
@@ -923,12 +1555,18 @@ function renderBattle() {
 }
 
 function renderDeckCount() {
-    $('deck-count').textContent = `剩余: ${G.deck.length}`;
+    var count = (G.mode === 'online' && G.role === 'guest') ? G._deckCount : G.deck.length;
+    $('deck-count').textContent = `剩余: ${count}`;
 }
 
 function renderCardCounts() {
     $('player-card-count').textContent = `手牌: ${G.playerHand.length}`;
-    $('computer-card-count').textContent = `手牌: ${G.computerHand.length}`;
+    if (G.mode === 'online') {
+        var oppCount = G.role === 'host' ? G.computerHand.length : G.opponentHandCount;
+        $('computer-card-count').textContent = `手牌: ${oppCount}`;
+    } else {
+        $('computer-card-count').textContent = `手牌: ${G.computerHand.length}`;
+    }
 }
 
 function enablePlayerSelect(mode) {
@@ -1017,11 +1655,70 @@ function addLog(msg, cls) {
 // ==================== 事件绑定 ====================
 
 document.addEventListener('DOMContentLoaded', () => {
-    // 难度选择
+    // ===== 模式选择 =====
+    $('btn-single').addEventListener('click', () => {
+        closeModal('mode-modal');
+        openModal('difficulty-modal');
+    });
+    $('btn-online').addEventListener('click', () => {
+        closeModal('mode-modal');
+        openModal('lobby-modal');
+        // Reset lobby UI
+        $('btn-create-room').style.display = '';
+        $('room-code-display').style.display = 'none';
+        $('btn-copy-code').disabled = true;
+        $('input-room-code').value = '';
+        $('lobby-status').textContent = '请创建或加入房间';
+        $('lobby-status').style.color = '';
+    });
+
+    // ===== 联机大厅 =====
+    $('btn-create-room').addEventListener('click', () => {
+        $('btn-create-room').disabled = true;
+        initHost();
+    });
+    $('btn-join-room').addEventListener('click', () => {
+        var code = $('input-room-code').value.trim();
+        if (!code) return;
+        $('btn-join-room').disabled = true;
+        $('input-room-code').disabled = true;
+        initGuest(code);
+    });
+    $('input-room-code').addEventListener('input', () => {
+        $('btn-join-room').disabled = !$('input-room-code').value.trim();
+    });
+    $('btn-copy-code').addEventListener('click', () => {
+        var code = G.roomCode;
+        if (navigator.clipboard) {
+            navigator.clipboard.writeText(code).then(() => {
+                $('btn-copy-code').textContent = '已复制!';
+                setTimeout(() => { $('btn-copy-code').textContent = '复制'; }, 2000);
+            });
+        } else {
+            // Fallback for WeChat
+            var ta = document.createElement('textarea');
+            ta.value = code;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+            $('btn-copy-code').textContent = '已复制!';
+            setTimeout(() => { $('btn-copy-code').textContent = '复制'; }, 2000);
+        }
+    });
+    $('btn-back-mode').addEventListener('click', () => {
+        cleanupPeer();
+        closeModal('lobby-modal');
+        openModal('mode-modal');
+    });
+
+    // ===== 单人难度选择 =====
     document.querySelectorAll('.diff-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             const diff = btn.dataset.diff;
-            startGame(diff);
+            startSingleGame(diff);
         });
     });
 
@@ -1034,26 +1731,33 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 重新开始
     $('gameover-restart').addEventListener('click', () => {
+        cleanupPeer();
         closeModal('gameover-modal');
-        openModal('difficulty-modal');
+        openModal('mode-modal');
     });
     $('btn-restart').addEventListener('click', () => {
         if (G.phase !== 'game_over' && G.phase !== 'init') {
-            if (!confirm('确定要重新开始吗？当前进度将丢失。')) return;
+            var msg = G.mode === 'online'
+                ? '确定要退出当前对战吗？'
+                : '确定要重新开始吗？当前进度将丢失。';
+            if (!confirm(msg)) return;
         }
+        cleanupPeer();
         closeModal('gameover-modal');
-        openModal('difficulty-modal');
+        openModal('mode-modal');
         G.phase = 'init';
         disablePlayerSelect();
-        $('battle-log').innerHTML = '<p class="log-placeholder">请选择难度开始游戏。</p>';
+        $('battle-log').innerHTML = '<p class="log-placeholder">请选择模式开始游戏。</p>';
         $('turn-indicator').textContent = '等待开始...';
         G.battleAttack = [];
         G.battleDefend = [];
+        G.mode = 'single';
+        G.role = null;
         renderAll();
     });
 
-    // 初始显示难度选择
-    openModal('difficulty-modal');
+    // 初始显示模式选择
+    openModal('mode-modal');
     $('btn-confirm').style.display = 'none';
     renderAll();
 });
